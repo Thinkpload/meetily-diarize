@@ -673,40 +673,46 @@ jobs:
         run: |
           $rawKey = $env:RAW_KEY
 
-          # Debug: show first 40 chars and line count (without exposing the full secret)
+          # Debug: show structure without exposing secret content
           if ($rawKey) {
             $lines = $rawKey -split "`n"
             Write-Host "Key line count: $($lines.Count)"
-            Write-Host "First line starts with 'untrusted comment:': $($lines[0].StartsWith('untrusted comment:'))"
-            Write-Host "First 40 chars of first line: $($lines[0].Substring(0, [Math]::Min(40, $lines[0].Length)))"
+            $firstLine = $lines[0].TrimEnd("`r")
+            Write-Host "First line starts with 'untrusted comment:': $($firstLine.StartsWith('untrusted comment:'))"
+            Write-Host "First 40 chars of first line: $($firstLine.Substring(0, [Math]::Min(40, $firstLine.Length)))"
           } else {
-            Write-Host "RAW_KEY is empty"
+            Write-Host "RAW_KEY is empty — updater signing will be skipped"
           }
 
-          # Tauri (minisign) requires the key first line to be "untrusted comment: ..."
+          # Tauri (minisign) requires the first line to be "untrusted comment: ..."
+          # We write directly to TAURI_SIGNING_PRIVATE_KEY so the build step inherits
+          # the full multiline value without expression-truncation issues.
+          $del = '__TAURI_KEY_EOF__'
           if (-not $rawKey) {
-            Write-Host "Signing key not set, passing empty value"
-            Add-Content -Path $env:GITHUB_ENV -Value "TAURI_SIGNING_KEY_NORMALIZED="
-          } elseif ($rawKey.TrimStart().StartsWith('untrusted comment:')) {
-            Write-Host "Key already has untrusted comment header"
-            # Write multiline value using GitHub Actions heredoc syntax
-            Add-Content -Path $env:GITHUB_ENV -Value "TAURI_SIGNING_KEY_NORMALIZED<<__SIGNING_KEY_EOF__"
-            Add-Content -Path $env:GITHUB_ENV -Value $rawKey
-            Add-Content -Path $env:GITHUB_ENV -Value "__SIGNING_KEY_EOF__"
+            # Nothing to set — leave env var absent so Tauri skips signing
           } else {
-            Write-Host "Key missing untrusted comment header — prepending it"
-            $normalized = "untrusted comment: minisign secret key`n" + $rawKey.TrimStart()
-            Add-Content -Path $env:GITHUB_ENV -Value "TAURI_SIGNING_KEY_NORMALIZED<<__SIGNING_KEY_EOF__"
-            Add-Content -Path $env:GITHUB_ENV -Value $normalized
-            Add-Content -Path $env:GITHUB_ENV -Value "__SIGNING_KEY_EOF__"
+            $firstLine = ($rawKey -split "`n")[0].TrimEnd("`r")
+            if ($firstLine.StartsWith('untrusted comment:')) {
+              Write-Host "Key already valid — writing to TAURI_SIGNING_PRIVATE_KEY"
+              $normalized = $rawKey
+            } else {
+              Write-Host "Prepending missing 'untrusted comment:' header"
+              $normalized = "untrusted comment: minisign secret key`n" + $rawKey.TrimStart()
+            }
+            # Use heredoc syntax so the multiline value is set correctly
+            $envFile = $env:GITHUB_ENV
+            [System.IO.File]::AppendAllText($envFile, "TAURI_SIGNING_PRIVATE_KEY<<$del`n", [System.Text.Encoding]::UTF8)
+            [System.IO.File]::AppendAllText($envFile, $normalized.TrimEnd() + "`n", [System.Text.Encoding]::UTF8)
+            [System.IO.File]::AppendAllText($envFile, "$del`n", [System.Text.Encoding]::UTF8)
+            Write-Host "TAURI_SIGNING_PRIVATE_KEY written to GITHUB_ENV"
           }
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Tauri updater signing (ALWAYS enabled for .sig files)
-          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_KEY_NORMALIZED }}
+          # TAURI_SIGNING_PRIVATE_KEY is set by the normalize step above via GITHUB_ENV
+          # (not set here to avoid expression-truncation of multiline values)
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # License validation RSA public key (embedded at build time)
           MEETILY_RSA_PUBLIC_KEY: ${{ secrets.MEETILY_RSA_PUBLIC_KEY }}
