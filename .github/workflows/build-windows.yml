@@ -666,12 +666,34 @@ jobs:
           path: frontend/src-tauri/binaries/ffmpeg-*.exe
           key: ${{ runner.os }}-ffmpeg-${{ hashFiles('frontend/src-tauri/build.rs', 'frontend/src-tauri/build/ffmpeg.rs') }}
 
+      - name: Normalize updater signing key format
+        shell: bash
+        env:
+          RAW_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          # Tauri (minisign) requires the key to start with "untrusted comment: "
+          # If the secret was stored without this header line, prepend it.
+          if [[ -z "$RAW_KEY" ]]; then
+            echo "Signing key not set, skipping normalization"
+            echo "TAURI_SIGNING_KEY_NORMALIZED=" >> "$GITHUB_ENV"
+          elif [[ "$RAW_KEY" == "untrusted comment:"* ]]; then
+            echo "Key already has untrusted comment header"
+            echo "TAURI_SIGNING_KEY_NORMALIZED<<EOF" >> "$GITHUB_ENV"
+            echo "$RAW_KEY" >> "$GITHUB_ENV"
+            echo "EOF" >> "$GITHUB_ENV"
+          else
+            echo "Key missing untrusted comment header, prepending it"
+            echo "TAURI_SIGNING_KEY_NORMALIZED<<EOF" >> "$GITHUB_ENV"
+            printf 'untrusted comment: minisign secret key\n%s\n' "$RAW_KEY" >> "$GITHUB_ENV"
+            echo "EOF" >> "$GITHUB_ENV"
+          fi
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Tauri updater signing (ALWAYS enabled for .sig files)
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ env.TAURI_SIGNING_KEY_NORMALIZED }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # License validation RSA public key (embedded at build time)
           MEETILY_RSA_PUBLIC_KEY: ${{ secrets.MEETILY_RSA_PUBLIC_KEY }}
