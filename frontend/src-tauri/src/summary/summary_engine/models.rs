@@ -100,6 +100,42 @@ pub fn get_available_models() -> Vec<ModelDef> {
             },
             description: "Balanced model. Great quality/speed trade-off. Requires ~3.5GB RAM.".to_string(),
         },
+        // Gemma 4 E4B - Edge tier (MatFormer, 4B active params)
+        ModelDef {
+            name: "gemma4:e4b".to_string(),
+            display_name: "Gemma 4 E4B (Edge)".to_string(),
+            gguf_file: "gemma-4-E4B-it-UD-Q4_K_XL.gguf".to_string(),
+            template: "gemma3".to_string(),
+            download_url: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-UD-Q4_K_XL.gguf".to_string(),
+            size_mb: 5130,
+            context_size: 32768,
+            layer_count: 34,
+            sampling: SamplingParams {
+                temperature: 1.0,
+                top_k: 64,
+                top_p: 0.95,
+                stop_tokens: vec!["<end_of_turn>".to_string()],
+            },
+            description: "Gemma 4 edge variant. Multimodal-capable, 256K context support, ~5GB RAM.".to_string(),
+        },
+        // Gemma 4 26B-A4B - High-quality MoE tier (3.8B active params)
+        ModelDef {
+            name: "gemma4:26b-a4b".to_string(),
+            display_name: "Gemma 4 26B-A4B (Quality MoE)".to_string(),
+            gguf_file: "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf".to_string(),
+            template: "gemma3".to_string(),
+            download_url: "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf".to_string(),
+            size_mb: 16900,
+            context_size: 32768,
+            layer_count: 62,
+            sampling: SamplingParams {
+                temperature: 1.0,
+                top_k: 64,
+                top_p: 0.95,
+                stop_tokens: vec!["<end_of_turn>".to_string()],
+            },
+            description: "Gemma 4 MoE. Highest quality, only 3.8B active params. Requires ~17GB disk / 12GB+ RAM.".to_string(),
+        },
     ]
 }
 
